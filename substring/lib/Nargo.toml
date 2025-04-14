@@ -1,0 +1,7 @@
+[package]
+name = "chacha20_lib"
+version = "1.0.0-beta.2"
+type = "lib"
+authors = ["Tisura"]
+
+[dependencies]

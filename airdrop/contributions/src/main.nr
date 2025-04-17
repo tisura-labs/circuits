@@ -3,7 +3,18 @@ use json_parser::{JSON, JSON512b};
 
 /*
     Expected JSON schema:
-    {'data': {'repository': {'defaultBranchRef': {'target': {'history': {'totalCount': <n>}}}}}}
+    {
+    "data": {
+        "repository": {
+            "defaultBranchRef": {
+                "target": {
+                    "history": {
+                        "totalCount": <n>
+                    }
+                }
+            }
+        }
+    }
 
     Where <n> is the number commits in the repo's default branch.
 */

@@ -3,7 +3,14 @@ use json_parser::{JSON, JSON512b};
 
 /*
     Expected JSON schema:
-    {'data': {'viewer': {'id': <node_id>, 'login': <login>}}}
+    {
+        "data": {
+            "viewer": {
+                "id": "<node_id>",
+                "login": "<login>"
+            }
+        }
+    }
 
     Where <node_id> is a 12 character string.
 */

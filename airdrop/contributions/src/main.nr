@@ -26,7 +26,7 @@ fn main(
     ctr: u32,
     mut nonce: [u32; 3],
     ciphertext: pub BoundedVec<u8, MAX>,
-    count: u64,
+    count: pub u64,
 ) {
     // TODO: Check for trusted proxy signature to be sure the response comes from a gh graphql endpoint.
     // DEV: Should we validate repo ? What if it's a gh graphql endpoint but a diff repo that has > n contributions ?

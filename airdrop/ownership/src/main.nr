@@ -25,22 +25,20 @@ fn main(
     ctr: u32,
     mut nonce: [u32; 3],
     ciphertext: pub BoundedVec<u8, MAX>,
-    node_id: pub BoundedVec<u8, NODE_ID_LEN>,
+    node_id: pub str<NODE_ID_LEN>,
 ) {
     // TODO: Check for trusted proxy signature.
     let chacha20 = ChaCha20::new(&mut key, ctr, &mut nonce);
 
     // `ciphertext` is the encrypted response of the gh graphql endpoint.
     let decrypted: BoundedVec<u8, MAX> = chacha20.decrypt(ciphertext);
-
     // Convert decrypted and plaintext from `BoundedVec<u8, MAX>` to `[u8; MAX]`, then to a `str<MAX>` to be parsed.
     let decrypted_str: str<MAX> = decrypted.storage().as_str_unchecked(); // DEV: Converting to a `BoundedVec` may introduce zeroed out elements on the right if decrypted.len() < MAX. It might be better to reimplement lib to use [u8, MAX] directly.
-    let node_id_str: str<NODE_ID_LEN> = node_id.storage().as_str_unchecked();
 
-    check_ownership(decrypted_str, node_id_str);
+    check_ownership(decrypted_str, node_id);
 }
 
-fn check_ownership<let N: u32>(decrypted_str: str<MAX>, expected__node_id: str<N>) {
+fn check_ownership<let N: u32>(decrypted_str: str<MAX>, expected_node_id: str<N>) {
     // Parse decrypted API response.
     let json: JSON512b = JSON::parse_json_from_string(decrypted_str);
     let data: JSON512b = json.get_object_unchecked("data".as_bytes());
@@ -48,7 +46,7 @@ fn check_ownership<let N: u32>(decrypted_str: str<MAX>, expected__node_id: str<N
     let id: BoundedVec<u8, MAX> = viewer.get_string_unchecked("id".as_bytes());
 
     // Assert `id` is the expected value.
-    assert(id == BoundedVec::from_array(expected__node_id.as_bytes()));
+    assert(id == BoundedVec::from_array(expected_node_id.as_bytes()));
 }
 
 #[test]
@@ -73,7 +71,7 @@ fn test_main() {
         82,
     ]);
 
-    let id: BoundedVec<u8, 12> = BoundedVec::from_array("U_kgDOCPtlRA".as_bytes());
+    let id: str<NODE_ID_LEN> = "U_kgDOCPtlRA";
     main(key, ctr, nonce, ciphertext, id);
 }
 
@@ -86,7 +84,7 @@ fn test_check_ownership() {
     let ctr: u32 = 1;
     let mut nonce: [u32; 3] = [0x5ef1f372, 0x244dd026, 0x795c577c];
 
-    let json: str<160> = "{\"data\": {\"viewer\": {\"id\": \"U_kgDOCPtlRA\", \"login\": \"0x18a6\"}}, \"padding\": 000000000000000000000000000000000000000000000000000000000000000000000000000000000000}";
+    let json: str<MAX> = "{\"data\": {\"viewer\": {\"id\": \"U_kgDOCPtlRA\", \"login\": \"0x18a6\"}}, \"padding\": 000000000000000000000000000000000000000000000000000000000000000000000000000000000000}";
     let expected_value: str<NODE_ID_LEN> = "U_kgDOCPtlRA";
 
     check_ownership(json, expected_value);

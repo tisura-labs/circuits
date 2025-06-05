@@ -6,4 +6,5 @@ authors = ["Tisura"]
 
 [dependencies]
 chacha20 = { path = "../../substring/lib" }
+airdrop = { path = "../lib" }
 json_parser = { tag = "v0.4.0", git = "https://github.com/noir-lang/noir_json_parser" }

@@ -64,8 +64,8 @@ fn test_main() {
     let mut nonce: [u32; 3] = [0x00000001, 0x00000002, 0x00000003];
 
     // Example ciphertext from a close to reality GitHub GraphQL API response.
-    let plaintext: str<MAX_OWNERSHIP_CIPHERTEXT_LEN> = r#"\r\n\r\n{"data":{"viewer":{"id":"U_1234567891"}}}��F�$��5�/>MO��I��������}���������T#��������"#;
-    let node_id: str<NODE_ID_LEN> = "U_1234567891";
+    let plaintext: str<MAX_OWNERSHIP_CIPHERTEXT_LEN> = r#"\r\n\r\n{"data":{"viewer":{"id":"U_XXXXXXXXXX"}}}��F�$��5�/>MO��I��������}���������T#��������"#;
+    let node_id: str<NODE_ID_LEN> = "U_XXXXXXXXXX";
 
     // Calculate ciphertext.
     let mut plaintext_vec: BoundedVec<u8, MAX_OWNERSHIP_CIPHERTEXT_LEN> = BoundedVec::new();
@@ -74,7 +74,7 @@ fn test_main() {
     let ciphertext = chacha.encrypt(plaintext_vec);
     println(ciphertext);
 
-    let json: str<MAX_JSON_LENGTH> = r#"{"data":{"viewer":{"id":"U_1234567891"}}}"#;
+    let json: str<MAX_JSON_LENGTH> = r#"{"data":{"viewer":{"id":"U_XXXXXXXXXX"}}}"#;
     let start: u32 = 8; // Start index of the JSON in the decrypted response.
     let end: u32 = 49; // End index of the JSON in the decrypted response.
     let jsonSlice = JsonSlice { json, start, end };

@@ -21,7 +21,7 @@ fn main(
 ) {
     // Check for trusted proxy signature to be sure the response comes from a gh graphql endpoint.
     // DEV: Is using ciphertext.storage() safe?
-    let record_hash = keccak256(ciphertext.storage(), MAX_CONTRIBUTIONS_CIPHERTEXT_LEN);
+    let record_hash = keccak256(ciphertext.storage(), ciphertext.len());
     let valid_signature = std::ecdsa_secp256k1::verify_signature(
         PROXY_PUBKEY_X,
         PROXY_PUBKEY_Y,

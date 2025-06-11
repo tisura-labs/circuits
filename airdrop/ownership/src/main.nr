@@ -18,7 +18,7 @@ fn main(
     json_slice: pub JsonSlice<MAX_JSON_LENGTH>,
     ciphertext_hash_signed: pub [u8; 64],
 ) {
-    let record_hash: [u8; 32] = keccak256(ciphertext.storage(), MAX_OWNERSHIP_CIPHERTEXT_LEN);
+    let record_hash: [u8; 32] = keccak256(ciphertext.storage(), ciphertext.len());
     // Check for trusted proxy signature to be sure the response comes from a gh graphql endpoint.
     let valid_signature = std::ecdsa_secp256k1::verify_signature(
         PROXY_PUBKEY_X,

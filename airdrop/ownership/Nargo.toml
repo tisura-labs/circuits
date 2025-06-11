@@ -1,6 +1,6 @@
 [package]
 name = "Ownership"
-version = "1.0.0-beta.2"
+version = "1.0.0-beta.6"
 type = "bin"
 authors = ["Tisura"]
 
@@ -8,3 +8,4 @@ authors = ["Tisura"]
 chacha20 = { path = "../../substring/lib" }
 airdrop = { path = "../lib" }
 json_parser = { tag = "v0.4.0", git = "https://github.com/noir-lang/noir_json_parser" }
+keccak256 = { tag = "v0.1.0", git = "https://github.com/noir-lang/keccak256" }

@@ -6,7 +6,7 @@ pub struct JsonSlice<let MAX_JSON_LENGTH: u32> {
 
 pub fn check_json<let MAX_LEN: u32, let MAX_JSON_LENGTH: u32>(
     decrypted: BoundedVec<u8, MAX_LEN>,
-    json_slice: pub JsonSlice<MAX_JSON_LENGTH>,
+    json_slice: JsonSlice<MAX_JSON_LENGTH>,
 ) {
     for i in 0..MAX_JSON_LENGTH {
         if i + json_slice.start < json_slice.end {

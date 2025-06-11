@@ -1,7 +1,7 @@
 use airdrop::{constants::{PROXY_PUBKEY_X, PROXY_PUBKEY_Y}, utils::{check_json, JsonSlice}};
 use chacha20::ChaCha20;
 use json_parser::{JSON, JSON512b};
-use std::hash::keccak256;
+use keccak256::keccak256;
 
 global MAX_OWNERSHIP_CIPHERTEXT_LEN: u32 = 160;
 global MAX_JSON_LENGTH: u32 = 41; // In Ownership, len of JSON is always 41.

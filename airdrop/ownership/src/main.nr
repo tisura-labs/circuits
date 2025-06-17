@@ -4,7 +4,7 @@ use json_parser::{JSON, JSON512b};
 use keccak256::keccak256;
 
 global MAX_OWNERSHIP_CIPHERTEXT_LEN: u32 = 160;
-global MAX_JSON_LENGTH: u32 = 41; // In Ownership, len of JSON is always 41.
+global MAX_JSON_LENGTH: u32 = 32; // In Ownership, len of JSON is always 32.
 global NODE_ID_LEN: u32 = 12;
 
 // TODO: Refactor to implement a struct.
@@ -43,20 +43,16 @@ fn check_ownership(json_str: str<MAX_JSON_LENGTH>, expected_node_id: str<NODE_ID
     /*
     Expected JSON schema:
     {
-        "data": {
-            "viewer": {
-                "id": "<node_id>"
-            }
+        "viewer": {
+            "id": "<node_id>"
         }
     }
-
     Where <node_id> is a 12 character string.
     */
 
     // Parse decrypted API response.
     let json: JSON512b = JSON::parse_json_from_string(json_str);
-    let data: JSON512b = json.get_object_unchecked("data".as_bytes());
-    let viewer: JSON512b = data.get_object_unchecked("viewer".as_bytes());
+    let viewer: JSON512b = json.get_object_unchecked("viewer".as_bytes());
     let id: BoundedVec<u8, MAX_OWNERSHIP_CIPHERTEXT_LEN> =
         viewer.get_string_unchecked("id".as_bytes());
 
@@ -85,15 +81,15 @@ fn test_main() {
     println(ciphertext);
 
     // TODO: test for \\r\\n\\r\\n.
-    let json: str<MAX_JSON_LENGTH> = "{\"data\":{\"viewer\":{\"id\":\"U_xxxxxxxxxx\"}}}";
-    let start: u32 = 0; // Start index of the JSON in the decrypted response.
+    let json: str<MAX_JSON_LENGTH> = "{\"viewer\":{\"id\":\"U_xxxxxxxxxx\"}}";
+    let start: u32 = 8; // Start index of the JSON in the decrypted response.
     let end: u32 = MAX_OWNERSHIP_CIPHERTEXT_LEN; // End index of the JSON in the decrypted response.
     let json_slice = JsonSlice { json, start, end };
     let ciphertext_hash_signed: [u8; 64] = [
-        220, 210, 33, 249, 183, 15, 182, 58, 248, 200, 233, 84, 31, 162, 187, 126, 1, 162, 180, 117,
-        62, 93, 208, 55, 202, 253, 106, 24, 12, 191, 144, 99, 108, 193, 20, 159, 161, 111, 36, 82,
-        243, 80, 201, 73, 222, 5, 3, 72, 112, 171, 38, 46, 62, 135, 193, 88, 237, 192, 208, 145, 40,
-        173, 111, 249,
+        254, 208, 153, 65, 105, 112, 138, 143, 146, 22, 214, 166, 182, 89, 210, 206, 83, 95, 91,
+        186, 90, 2, 25, 76, 236, 94, 226, 143, 74, 185, 134, 85, 48, 59, 106, 99, 187, 119, 25, 249,
+        175, 209, 255, 185, 24, 215, 51, 106, 21, 197, 17, 56, 66, 154, 230, 177, 51, 252, 249, 247,
+        243, 247, 223, 131,
     ]; // Removed the last 0x01 which is the recovery id.
 
     main(

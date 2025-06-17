@@ -55,29 +55,26 @@ fn check_contributions(
     /*
     Expected JSON schema:
     {
-       "data":{
-          "repository":{
-             "name":<repository_name>,
-             "owner":{
+        "repository":{
+            "name":<repository_name>,
+            "owner":{
                 "login":<repository_owner>,
-             },
-             "defaultBranchRef":{
+            },
+            "defaultBranchRef":{
                 "target":{
-                   "history":{
-                      "totalCount":<n>
-                   }
+                    "history":{
+                        "totalCount":<n>
+                    }
                 }
-             }
-          }
-       }
+            }
+        }
     }
 
     Where <n> is the number commits in the repo's default branch.
     */
 
     let json: JSON512b = JSON::parse_json_from_string(json_str);
-    let data: JSON512b = json.get_object_unchecked("data".as_bytes());
-    let repository: JSON512b = data.get_object_unchecked("repository".as_bytes());
+    let repository: JSON512b = json.get_object_unchecked("repository".as_bytes());
 
     // Parse decrypted API response to get `repository_name` and `repository_owner`.
     let repository_name: BoundedVec<u8, MAX_REPO_NAME_LEN> =
@@ -132,15 +129,15 @@ fn test_main() {
         BoundedVec::from_array([116, 105, 115, 117, 114, 97, 45, 108, 97, 98, 115]);
     let count: u64 = 50;
     // Example JSON in string format padded with empty spaces.
-    let json: str<MAX_JSON_LENGTH> = r#"{"data":{"repository":{"name":"mono","owner":{"login":"tisura-labs"},"defaultBranchRef":{"target":{"history":{"totalCount":50}}}}}}                             "#;
-    let start: u32 = 8; // Start index of the JSON in the decrypted response.
+    let json: str<MAX_JSON_LENGTH> = r#"{"repository":{"name":"mono","owner":{"login":"tisura-labs"},"defaultBranchRef":{"target":{"history":{"totalCount":50}}}}}                                      "#;
+    let start: u32 = 16; // Start index of the JSON in the decrypted response.
     let end: u32 = 135; // End index of the JSON in the decrypted response.
     let json_slice = JsonSlice { json, start, end };
     let ciphertext_hash_signed: [u8; 64] = [
-        222, 214, 30, 146, 55, 152, 197, 47, 176, 223, 214, 91, 114, 11, 132, 254, 91, 40, 209, 144,
-        137, 191, 9, 145, 237, 52, 74, 243, 121, 226, 1, 23, 47, 119, 208, 239, 56, 212, 247, 173,
-        245, 46, 72, 113, 173, 40, 36, 200, 136, 36, 77, 234, 94, 78, 249, 168, 158, 215, 207, 119,
-        4, 6, 93, 32,
+        72, 86, 251, 87, 170, 161, 81, 33, 0, 187, 90, 156, 131, 12, 221, 5, 136, 54, 126, 52, 193,
+        107, 11, 77, 25, 96, 1, 35, 25, 177, 255, 196, 82, 117, 11, 222, 32, 145, 36, 179, 10, 176,
+        37, 47, 195, 216, 4, 35, 130, 113, 51, 249, 42, 8, 18, 188, 174, 36, 167, 136, 136, 251,
+        251, 89,
     ]; // Removed the last 0x01 which is the recovery id.
 
     main(

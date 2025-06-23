@@ -1,8 +1,8 @@
 use airdrop::constants::{
     MAX_CONTRIBUTIONS_JSON_LENGTH, MAX_CONTRIBUTIONS_RECORD_LEN, MAX_REPO_NAME_LEN,
-    MAX_REPO_OWNER_LEN, PROXY_PUBKEY_X, PROXY_PUBKEY_Y,
+    MAX_REPO_OWNER_LEN,
 };
-use airdrop::utils::{decrypt_record, JsonSlice, search_json, verify_proxy_sig};
+use airdrop::utils::{decrypt_record, get_proxy_pubkeys, JsonSlice, search_json, verify_proxy_sig};
 use json_parser::{JSON, JSON512b};
 
 fn main(
@@ -15,12 +15,14 @@ fn main(
     n_contributions: pub u64,
     graphql_response: pub JsonSlice<MAX_CONTRIBUTIONS_JSON_LENGTH>,
     encrypted_record_signed: pub [u8; 64],
+    proxy_pubkey_x: pub [u8; 32],
+    proxy_pubkey_y: pub [u8; 32],
 ) {
     // 1. Verify encrypted_record comes from the trusted proxy.
     verify_proxy_sig(
         encrypted_record,
-        PROXY_PUBKEY_X,
-        PROXY_PUBKEY_Y,
+        proxy_pubkey_x,
+        proxy_pubkey_y,
         encrypted_record_signed,
     );
 
@@ -96,6 +98,7 @@ fn test_main() {
     let (repo_name, repo_owner, n_contributions) = get_test_repo_name_owner_n_contributions();
     let encrypted_record = get_test_encrypted_record();
     let ciphertext_hash_signed: [u8; 64] = get_test_encrypted_record_signed();
+    let (proxy_pubkey_x, proxy_pubkey_y) = get_proxy_pubkeys();
 
     // Example JSON in string format padded with empty spaces.
     let json: str<MAX_CONTRIBUTIONS_JSON_LENGTH> = r#"{"repository":{"name":"mono","owner":{"login":"tisura-labs"},"defaultBranchRef":{"target":{"history":{"totalCount":50}}}}}                                      "#;
@@ -113,6 +116,8 @@ fn test_main() {
         n_contributions,
         json_slice,
         ciphertext_hash_signed,
+        proxy_pubkey_x,
+        proxy_pubkey_y,
     );
 }
 

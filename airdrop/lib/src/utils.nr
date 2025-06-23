@@ -1,6 +1,7 @@
-use std::ecdsa_secp256k1::verify_signature;
-use keccak256::keccak256;
+use crate::constants::{PROXY_PUBKEY_X, PROXY_PUBKEY_Y};
 use chacha20::ChaCha20;
+use keccak256::keccak256;
+use std::ecdsa_secp256k1::verify_signature;
 
 pub struct JsonSlice<let MAX_JSON_LENGTH: u32> {
     json: str<MAX_JSON_LENGTH>,
@@ -36,6 +37,8 @@ fn verify_proxy_sig<let max_record_len: u32>(
         encrypted_record_signature,
         encrypted_record_hash,
     );
+    assert(proxy_pubkey_x == PROXY_PUBKEY_X, "Unexpected proxy public key X!");
+    assert(proxy_pubkey_y == PROXY_PUBKEY_Y, "Unexpected proxy public key Y!");
     assert(is_verified, "proxy did not sign encrypted_record_hash!");
 }
 
@@ -46,9 +49,12 @@ fn decrypt_record<let max_record_len: u32>(
     encrypted_record: BoundedVec<u8, max_record_len>,
 ) -> BoundedVec<u8, max_record_len> {
     let chacha20 = ChaCha20::new(&mut key, ctr, &mut nonce);
-    let decrypted_record: BoundedVec<u8, max_record_len> =
-        chacha20.decrypt(encrypted_record);
+    let decrypted_record: BoundedVec<u8, max_record_len> = chacha20.decrypt(encrypted_record);
     decrypted_record
+}
+
+fn get_proxy_pubkeys() -> ([u8; 32], [u8; 32]) {
+    (PROXY_PUBKEY_X, PROXY_PUBKEY_Y)
 }
 
 #[test]

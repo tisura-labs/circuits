@@ -1,8 +1,5 @@
-use airdrop::constants::{
-    MAX_OWNERSHIP_JSON_LENGTH, MAX_OWNERSHIP_RECORD_LEN, NODE_ID_LEN, PROXY_PUBKEY_X,
-    PROXY_PUBKEY_Y,
-};
-use airdrop::utils::{decrypt_record, JsonSlice, search_json, verify_proxy_sig};
+use airdrop::constants::{MAX_OWNERSHIP_JSON_LENGTH, MAX_OWNERSHIP_RECORD_LEN, NODE_ID_LEN};
+use airdrop::utils::{decrypt_record, get_proxy_pubkeys, JsonSlice, search_json, verify_proxy_sig};
 use json_parser::{JSON, JSON512b};
 
 fn main(
@@ -13,12 +10,14 @@ fn main(
     node_id: pub str<NODE_ID_LEN>,
     graphql_response: pub JsonSlice<MAX_OWNERSHIP_JSON_LENGTH>,
     encrypted_record_signed: pub [u8; 64],
+    proxy_pubkey_x: pub [u8; 32],
+    proxy_pubkey_y: pub [u8; 32],
 ) {
     // 1. Verify encrypted_record comes from the trusted proxy.
     verify_proxy_sig(
         encrypted_record,
-        PROXY_PUBKEY_X,
-        PROXY_PUBKEY_Y,
+        proxy_pubkey_x,
+        proxy_pubkey_y,
         encrypted_record_signed,
     );
 
@@ -79,6 +78,7 @@ fn test_main() {
         175, 209, 255, 185, 24, 215, 51, 106, 21, 197, 17, 56, 66, 154, 230, 177, 51, 252, 249, 247,
         243, 247, 223, 131,
     ]; // Removed the last 0x01 which is the recovery id.
+    let (proxy_pubkey_x, proxy_pubkey_y) = get_proxy_pubkeys();
 
     main(
         key,
@@ -88,6 +88,8 @@ fn test_main() {
         node_id,
         json_slice,
         ciphertext_hash_signed,
+        proxy_pubkey_x,
+        proxy_pubkey_y,
     );
 }
 

@@ -1,56 +1,50 @@
-use airdrop::{constants::{PROXY_PUBKEY_X, PROXY_PUBKEY_Y}, utils::{check_json, JsonSlice}};
-use chacha20::ChaCha20;
+use airdrop::constants::{
+    MAX_CONTRIBUTIONS_JSON_LENGTH, MAX_CONTRIBUTIONS_RECORD_LEN, MAX_REPO_NAME_LEN,
+    MAX_REPO_OWNER_LEN, PROXY_PUBKEY_X, PROXY_PUBKEY_Y,
+};
+use airdrop::utils::{decrypt_record, JsonSlice, search_json, verify_proxy_sig};
 use json_parser::{JSON, JSON512b};
-use keccak256::keccak256;
-
-global MAX_CONTRIBUTIONS_CIPHERTEXT_LEN: u32 = 200;
-global MAX_JSON_LENGTH: u32 = 160; // In Contributions, Max length of JSON is up to 255, but we use 160 as a beginning.
-global MAX_REPO_NAME_LEN: u32 = 20;
-global MAX_REPO_OWNER_LEN: u32 = 20;
 
 fn main(
     mut key: [u32; 8],
     ctr: u32,
     mut nonce: [u32; 3],
-    ciphertext: pub BoundedVec<u8, MAX_CONTRIBUTIONS_CIPHERTEXT_LEN>,
-    expected_repository_name: pub BoundedVec<u8, MAX_REPO_NAME_LEN>,
-    expected_repository_owner: pub BoundedVec<u8, MAX_REPO_OWNER_LEN>,
-    count: pub u64,
-    json_slice: pub JsonSlice<MAX_JSON_LENGTH>,
-    ciphertext_hash_signed: pub [u8; 64],
+    encrypted_record: pub BoundedVec<u8, MAX_CONTRIBUTIONS_RECORD_LEN>,
+    repo_name: pub BoundedVec<u8, MAX_REPO_NAME_LEN>,
+    repo_owner: pub BoundedVec<u8, MAX_REPO_OWNER_LEN>,
+    n_contributions: pub u64,
+    graphql_response: pub JsonSlice<MAX_CONTRIBUTIONS_JSON_LENGTH>,
+    encrypted_record_signed: pub [u8; 64],
 ) {
-    // Check for trusted proxy signature to be sure the response comes from a gh graphql endpoint.
-    // DEV: Is using ciphertext.storage() safe?
-    let record_hash = keccak256(ciphertext.storage(), ciphertext.len());
-    let valid_signature = std::ecdsa_secp256k1::verify_signature(
+    // 1. Verify encrypted_record comes from the trusted proxy.
+    verify_proxy_sig(
+        encrypted_record,
         PROXY_PUBKEY_X,
         PROXY_PUBKEY_Y,
-        ciphertext_hash_signed,
-        record_hash,
+        encrypted_record_signed,
     );
-    assert(valid_signature);
 
-    let chacha20 = ChaCha20::new(&mut key, ctr, &mut nonce);
-    // `ciphertext` is the encrypted response of the gh graphql endpoint.
-    let decrypted: BoundedVec<u8, MAX_CONTRIBUTIONS_CIPHERTEXT_LEN> = chacha20.decrypt(ciphertext);
+    // 2. Decrypt the encrypted_record.
+    let decrypted_record: BoundedVec<u8, MAX_CONTRIBUTIONS_RECORD_LEN> =
+        decrypt_record(key, ctr, nonce, encrypted_record);
 
-    // Check if the decrypted response contains the expected JSON.
-    check_json(decrypted, json_slice);
+    // 3. Search for the expected GraphQL response in the decrypted record, the response is in JSON format.
+    search_json(decrypted_record, graphql_response);
 
-    // Check the contributions in the decrypted JSON.
+    // 4. Check for the number of contributions in the GraphQL response.
     check_contributions(
-        json_slice.json,
-        expected_repository_name,
-        expected_repository_owner,
-        count,
+        graphql_response.json,
+        repo_name,
+        repo_owner,
+        n_contributions,
     );
 }
 
 fn check_contributions(
-    json_str: str<MAX_JSON_LENGTH>,
-    expected_repository_name: BoundedVec<u8, MAX_REPO_NAME_LEN>,
-    expected_repository_owner: BoundedVec<u8, MAX_REPO_OWNER_LEN>,
-    expected_count: u64,
+    json_str: str<MAX_CONTRIBUTIONS_JSON_LENGTH>,
+    expected_repo_name: BoundedVec<u8, MAX_REPO_NAME_LEN>,
+    expected_repo_owner: BoundedVec<u8, MAX_REPO_OWNER_LEN>,
+    n_contributions: u64,
 ) {
     /*
     Expected JSON schema:
@@ -74,41 +68,79 @@ fn check_contributions(
     */
 
     let json: JSON512b = JSON::parse_json_from_string(json_str);
-    let repository: JSON512b = json.get_object_unchecked("repository".as_bytes());
+    let repo: JSON512b = json.get_object_unchecked("repository".as_bytes());
 
-    // Parse decrypted API response to get `repository_name` and `repository_owner`.
-    let repository_name: BoundedVec<u8, MAX_REPO_NAME_LEN> =
-        repository.get_string_unchecked("name".as_bytes());
-    let owner: JSON512b = repository.get_object_unchecked("owner".as_bytes());
-    let repository_owner: BoundedVec<u8, MAX_REPO_OWNER_LEN> =
+    // Parse decrypted API response to get `repo_name` and `repo_owner`.
+    let repo_name: BoundedVec<u8, MAX_REPO_NAME_LEN> = repo.get_string_unchecked("name".as_bytes());
+    let owner: JSON512b = repo.get_object_unchecked("owner".as_bytes());
+    let repo_owner: BoundedVec<u8, MAX_REPO_OWNER_LEN> =
         owner.get_string_unchecked("login".as_bytes());
 
     // Assert we're on the correct repo, identified by the name and owner.
-    assert(repository_name == expected_repository_name);
-    assert(repository_owner == expected_repository_owner);
+    assert(repo_name == expected_repo_name, "Unexpected repo name!");
+    assert(repo_owner == expected_repo_owner, "Unexpected repo owner!");
 
-    // Parse decrypted API response to get `count`.
-    let default_branch_ref: JSON512b =
-        repository.get_object_unchecked("defaultBranchRef".as_bytes());
+    // Parse decrypted API response to get `n_contributions`.
+    let default_branch_ref: JSON512b = repo.get_object_unchecked("defaultBranchRef".as_bytes());
     let target: JSON512b = default_branch_ref.get_object_unchecked("target".as_bytes());
     let history: JSON512b = target.get_object_unchecked("history".as_bytes());
     let total_count: u64 = history.get_number_unchecked("totalCount".as_bytes());
 
     // Assert `totalCount` is the expected value.
-    assert(total_count == expected_count);
+    assert(total_count == n_contributions, "Unexpected number of contributions!");
 }
-
-// DEV: Please extend the test suite with additional test cases, do not modify the existing tests.
 
 #[test]
 fn test_main() {
-    let mut key: [u32; 8] = [
-        0x00000001, 0x00000002, 0x00000003, 0x00000004, 0x00000005, 0x00000006, 0x00000007,
-        0x00000008,
-    ];
-    let ctr: u32 = 0x00000001;
-    let mut nonce: [u32; 3] = [0x00000001, 0x00000002, 0x00000003];
-    let ciphertext: BoundedVec<u8, MAX_CONTRIBUTIONS_CIPHERTEXT_LEN> = BoundedVec::from_array([
+    let (mut key, ctr, mut nonce) = get_test_key_ctr_nonce();
+    let (repo_name, repo_owner, n_contributions) = get_test_repo_name_owner_n_contributions();
+    let encrypted_record = get_test_encrypted_record();
+    let ciphertext_hash_signed: [u8; 64] = get_test_encrypted_record_signed();
+
+    // Example JSON in string format padded with empty spaces.
+    let json: str<MAX_CONTRIBUTIONS_JSON_LENGTH> = r#"{"repository":{"name":"mono","owner":{"login":"tisura-labs"},"defaultBranchRef":{"target":{"history":{"totalCount":50}}}}}                                      "#;
+    let start: u32 = 16; // Start index of the JSON in the decrypted response.
+    let end: u32 = 135; // End index of the JSON in the decrypted response.
+    let json_slice = JsonSlice { json, start, end };
+
+    main(
+        key,
+        ctr,
+        nonce,
+        encrypted_record,
+        repo_name,
+        repo_owner,
+        n_contributions,
+        json_slice,
+        ciphertext_hash_signed,
+    );
+}
+
+/*
+    Test helpers.
+*/
+
+fn get_test_key_ctr_nonce() -> ([u32; 8], u32, [u32; 3]) {
+    let key: [u32; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let ctr: u32 = 1;
+    let mut nonce: [u32; 3] = [1, 2, 3];
+    (key, ctr, nonce)
+}
+
+fn get_test_repo_name_owner_n_contributions() -> (BoundedVec<u8, MAX_REPO_NAME_LEN>, BoundedVec<u8, MAX_REPO_OWNER_LEN>, u64) {
+    let repo_name = "mono".as_bytes();
+    let repo_name_vec: BoundedVec<u8, MAX_REPO_NAME_LEN> = BoundedVec::from_array(repo_name);
+
+    let repo_owner = "tisura-labs".as_bytes();
+    let repo_owner_vec: BoundedVec<u8, MAX_REPO_OWNER_LEN> = BoundedVec::from_array(repo_owner);
+
+    let n_contributions: u64 = 50;
+
+    (repo_name_vec, repo_owner_vec, n_contributions)
+}
+
+fn get_test_encrypted_record() -> BoundedVec<u8, MAX_CONTRIBUTIONS_RECORD_LEN> {
+    let encrypted_record = BoundedVec::from_array([
         191, 88, 129, 116, 180, 222, 80, 8, 201, 208, 37, 123, 184, 139, 4, 178, 121, 218, 69, 155,
         114, 124, 147, 50, 74, 214, 13, 160, 63, 59, 97, 232, 168, 209, 166, 94, 25, 64, 62, 82,
         193, 212, 67, 133, 225, 236, 196, 218, 42, 188, 42, 229, 85, 216, 55, 152, 57, 7, 149, 56,
@@ -120,56 +152,14 @@ fn test_main() {
         241, 52, 85, 72, 235, 167, 23, 179, 231, 178, 37, 111, 204, 216, 124, 20, 239, 155, 206, 11,
         72, 40, 30, 190, 150, 246, 100, 7, 117, 28, 13, 42, 34, 219, 154, 184, 213, 38, 214, 55,
     ]);
+    encrypted_record
+}
 
-    // mono
-    let repository_name: BoundedVec<u8, MAX_REPO_NAME_LEN> =
-        BoundedVec::from_array([109, 111, 110, 111]);
-    // tisura-labs
-    let repository_owner: BoundedVec<u8, MAX_REPO_OWNER_LEN> =
-        BoundedVec::from_array([116, 105, 115, 117, 114, 97, 45, 108, 97, 98, 115]);
-    let count: u64 = 50;
-    // Example JSON in string format padded with empty spaces.
-    let json: str<MAX_JSON_LENGTH> = r#"{"repository":{"name":"mono","owner":{"login":"tisura-labs"},"defaultBranchRef":{"target":{"history":{"totalCount":50}}}}}                                      "#;
-    let start: u32 = 16; // Start index of the JSON in the decrypted response.
-    let end: u32 = 135; // End index of the JSON in the decrypted response.
-    let json_slice = JsonSlice { json, start, end };
-    let ciphertext_hash_signed: [u8; 64] = [
+fn get_test_encrypted_record_signed() -> [u8; 64] {
+    [
         72, 86, 251, 87, 170, 161, 81, 33, 0, 187, 90, 156, 131, 12, 221, 5, 136, 54, 126, 52, 193,
         107, 11, 77, 25, 96, 1, 35, 25, 177, 255, 196, 82, 117, 11, 222, 32, 145, 36, 179, 10, 176,
         37, 47, 195, 216, 4, 35, 130, 113, 51, 249, 42, 8, 18, 188, 174, 36, 167, 136, 136, 251,
         251, 89,
-    ]; // Removed the last 0x01 which is the recovery id.
-
-    main(
-        key,
-        ctr,
-        nonce,
-        ciphertext,
-        repository_name,
-        repository_owner,
-        count,
-        json_slice,
-        ciphertext_hash_signed,
-    );
-}
-
-/*
-    Helper.
-*/
-#[test]
-fn test_generate_ciphertext() {
-    let mut key: [u32; 8] = [
-        0x00000001, 0x00000002, 0x00000003, 0x00000004, 0x00000005, 0x00000006, 0x00000007,
-        0x00000008,
-    ];
-    let ctr: u32 = 0x00000001;
-    let mut nonce: [u32; 3] = [0x00000001, 0x00000002, 0x00000003];
-    let plaintext: str<MAX_CONTRIBUTIONS_CIPHERTEXT_LEN> = r#"\r\n\r\n{"data":{"repository":{"name":"mono","owner":{"login":"tisura-labs"},"defaultBranchRef":{"target":{"history":{"totalCount":50}}}}}}��F�$��5�/>MO��I�b}������T#�"#;
-
-    let mut plaintext_vec: BoundedVec<u8, MAX_CONTRIBUTIONS_CIPHERTEXT_LEN> = BoundedVec::new();
-    plaintext_vec.extend_from_array(plaintext.as_bytes());
-    let chacha = ChaCha20::new(&mut key, ctr, &mut nonce);
-    let ciphertext = chacha.encrypt(plaintext_vec);
-
-    println(ciphertext);
+    ] // Removed the last byte which is the recovery id.
 }

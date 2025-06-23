@@ -1,10 +1,14 @@
+use std::ecdsa_secp256k1::verify_signature;
+use keccak256::keccak256;
+use chacha20::ChaCha20;
+
 pub struct JsonSlice<let MAX_JSON_LENGTH: u32> {
     json: str<MAX_JSON_LENGTH>,
     start: u32,
     end: u32,
 }
 
-pub fn check_json<let MAX_LEN: u32, let MAX_JSON_LENGTH: u32>(
+pub fn search_json<let MAX_LEN: u32, let MAX_JSON_LENGTH: u32>(
     decrypted: BoundedVec<u8, MAX_LEN>,
     json_slice: JsonSlice<MAX_JSON_LENGTH>,
 ) {
@@ -18,8 +22,37 @@ pub fn check_json<let MAX_LEN: u32, let MAX_JSON_LENGTH: u32>(
     }
 }
 
+fn verify_proxy_sig<let max_record_len: u32>(
+    encrypted_record: BoundedVec<u8, max_record_len>,
+    proxy_pubkey_x: [u8; 32],
+    proxy_pubkey_y: [u8; 32],
+    encrypted_record_signature: [u8; 64],
+) {
+    // DEV: Is using ciphertext.storage() safe?
+    let encrypted_record_hash = keccak256(encrypted_record.storage(), encrypted_record.len());
+    let is_verified = verify_signature(
+        proxy_pubkey_x,
+        proxy_pubkey_y,
+        encrypted_record_signature,
+        encrypted_record_hash,
+    );
+    assert(is_verified, "proxy did not sign encrypted_record_hash!");
+}
+
+fn decrypt_record<let max_record_len: u32>(
+    mut key: [u32; 8],
+    ctr: u32,
+    mut nonce: [u32; 3],
+    encrypted_record: BoundedVec<u8, max_record_len>,
+) -> BoundedVec<u8, max_record_len> {
+    let chacha20 = ChaCha20::new(&mut key, ctr, &mut nonce);
+    let decrypted_record: BoundedVec<u8, max_record_len> =
+        chacha20.decrypt(encrypted_record);
+    decrypted_record
+}
+
 #[test]
-fn test_check_json() {
+fn test_search_json() {
     let decrypted: BoundedVec<u8, 200> = BoundedVec::from_array([
         13, 10, 13, 10, 123, 34, 100, 97, 116, 97, 34, 58, 123, 34, 114, 101, 112, 111, 115, 105,
         116, 111, 114, 121, 34, 58, 123, 34, 110, 97, 109, 101, 34, 58, 34, 109, 111, 110, 111, 34,
@@ -40,5 +73,5 @@ fn test_check_json() {
     let end: u32 = 135; // End index of the JSON in the decrypted response.
     let jsonSlice = JsonSlice { json, start, end };
 
-    check_json(decrypted, jsonSlice);
+    search_json(decrypted, jsonSlice);
 }

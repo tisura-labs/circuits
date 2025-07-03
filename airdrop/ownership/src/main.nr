@@ -1,5 +1,10 @@
-use airdrop::constants::{MAX_OWNERSHIP_JSON_LENGTH, MAX_OWNERSHIP_RECORD_LEN, NODE_ID_LEN};
-use airdrop::utils::{decrypt_record, get_proxy_pubkeys, JsonSlice, search_json, verify_proxy_sig};
+use airdrop::constants::{
+    MAX_OWNERSHIP_JSON_LEN, MAX_OWNERSHIP_RECORD_LEN, NODE_ID_LEN, OWNERSHIP_JSON_LEN,
+};
+use airdrop::utils::{
+    check_encrypted_json_ownership, decrypt_record, encrypt_substring, get_proxy_pubkeys, JsonSlice,
+    str_to_bounded_vec, verify_proxy_sig,
+};
 use json_parser::{JSON, JSON512b};
 
 fn main(
@@ -8,7 +13,7 @@ fn main(
     mut nonce: [u32; 3],
     encrypted_record: pub BoundedVec<u8, MAX_OWNERSHIP_RECORD_LEN>,
     node_id: pub str<NODE_ID_LEN>,
-    graphql_response: pub JsonSlice<MAX_OWNERSHIP_JSON_LENGTH>,
+    graphql_response: pub JsonSlice<MAX_OWNERSHIP_JSON_LEN>,
     encrypted_record_signed: pub [u8; 64],
     proxy_pubkey_x: pub [u8; 32],
     proxy_pubkey_y: pub [u8; 32],
@@ -21,18 +26,23 @@ fn main(
         encrypted_record_signed,
     );
 
-    // 2. Decrypt the encrypted_record.
-    let decrypted_record: BoundedVec<u8, MAX_OWNERSHIP_RECORD_LEN> =
-        decrypt_record(key, ctr, nonce, encrypted_record);
+    // 2. Encrypt the substring of the GraphQL response on the specific keystream offset (start of the JSON in the full encrypted record).
+    let encrypted_subtring: BoundedVec<u8, MAX_OWNERSHIP_JSON_LEN> = encrypt_substring(
+        key,
+        ctr,
+        nonce,
+        graphql_response.json,
+        graphql_response.start,
+    );
 
-    // 3. Search for the expected GraphQL response in the decrypted record, the response is in JSON format.
-    search_json(decrypted_record, graphql_response);
+    // 3. Check whether the encrypted substring (JSON) is present in the full encrypted record.
+    check_encrypted_json_ownership(encrypted_record, encrypted_subtring, graphql_response.start);
 
     // 4. Check for the node id in the GraphQL response.
     check_ownership(graphql_response.json, node_id);
 }
 
-fn check_ownership(json_str: str<MAX_OWNERSHIP_JSON_LENGTH>, expected_node_id: str<NODE_ID_LEN>) {
+fn check_ownership(json_str: str<MAX_OWNERSHIP_JSON_LEN>, expected_node_id: str<NODE_ID_LEN>) {
     /*
     Expected JSON schema:
     {
@@ -46,11 +56,10 @@ fn check_ownership(json_str: str<MAX_OWNERSHIP_JSON_LENGTH>, expected_node_id: s
     // Parse decrypted API response.
     let json: JSON512b = JSON::parse_json_from_string(json_str);
     let viewer: JSON512b = json.get_object_unchecked("viewer".as_bytes());
-    let id: BoundedVec<u8, MAX_OWNERSHIP_RECORD_LEN> = viewer.get_string_unchecked("id".as_bytes());
+    let id: BoundedVec<u8, NODE_ID_LEN> = viewer.get_string_unchecked("id".as_bytes());
 
     // Assert `id` is the expected value.
-    let expected_node_id_vec: BoundedVec<u8, MAX_OWNERSHIP_RECORD_LEN> =
-        BoundedVec::from_array(expected_node_id.as_bytes());
+    let expected_node_id_vec: BoundedVec<u8, NODE_ID_LEN> = str_to_bounded_vec(expected_node_id);
     assert(id == expected_node_id_vec);
 }
 
@@ -59,7 +68,8 @@ fn check_ownership(json_str: str<MAX_OWNERSHIP_JSON_LENGTH>, expected_node_id: s
 #[test]
 fn test_main() {
     let (mut key, ctr, mut nonce) = get_test_key_ctr_nonce();
-    let plaintext: str<MAX_OWNERSHIP_RECORD_LEN> = "{\"data\":{\"viewer\":{\"id\":\"U_xxxxxxxxxx\"}}}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+    let plaintext: str<MAX_OWNERSHIP_JSON_LEN> =
+        r#"xxxxxxxxxxxxxxxx{"viewer":{"id":"U_xxxxxxxxxx"}}xxxxxxxxxxxxxxxx"#;
     let node_id: str<NODE_ID_LEN> = "U_xxxxxxxxxx";
 
     // Calculate ciphertext.
@@ -67,16 +77,17 @@ fn test_main() {
     plaintext_vec.extend_from_array(plaintext.as_bytes());
     let ciphertext = decrypt_record(key, ctr, nonce, plaintext_vec); // decrypt_record encrypts plaintext.
 
-    // TODO: test for \\r\\n\\r\\n.
-    let json: str<MAX_OWNERSHIP_JSON_LENGTH> = "{\"viewer\":{\"id\":\"U_xxxxxxxxxx\"}}";
-    let start: u32 = 8; // Start index of the JSON in the decrypted response.
-    let end: u32 = MAX_OWNERSHIP_RECORD_LEN; // End index of the JSON in the decrypted response.
+    // DEV: we pad `json` with empty spaces because any other character will make JSON parsing [l. 55] fail.
+    let json: str<MAX_OWNERSHIP_JSON_LEN> =
+        r#"{"viewer":{"id":"U_xxxxxxxxxx"}}                                "#;
+    let start: u32 = 16; // Start index of the JSON in the decrypted response.
+    let end: u32 = OWNERSHIP_JSON_LEN + start; // End index of the JSON in the decrypted response.
     let json_slice = JsonSlice { json, start, end };
     let ciphertext_hash_signed: [u8; 64] = [
-        254, 208, 153, 65, 105, 112, 138, 143, 146, 22, 214, 166, 182, 89, 210, 206, 83, 95, 91,
-        186, 90, 2, 25, 76, 236, 94, 226, 143, 74, 185, 134, 85, 48, 59, 106, 99, 187, 119, 25, 249,
-        175, 209, 255, 185, 24, 215, 51, 106, 21, 197, 17, 56, 66, 154, 230, 177, 51, 252, 249, 247,
-        243, 247, 223, 131,
+        92, 173, 161, 226, 195, 196, 53, 2, 197, 191, 168, 22, 251, 159, 216, 5, 42, 194, 52, 252,
+        110, 42, 166, 8, 109, 44, 220, 202, 211, 216, 44, 76, 21, 57, 171, 183, 85, 250, 56, 254, 6,
+        224, 114, 154, 81, 6, 113, 85, 39, 119, 172, 122, 124, 140, 53, 164, 40, 157, 243, 53, 73,
+        86, 225, 79,
     ]; // Removed the last 0x01 which is the recovery id.
     let (proxy_pubkey_x, proxy_pubkey_y) = get_proxy_pubkeys();
 

@@ -1,30 +1,19 @@
-use crate::constants::{PROXY_PUBKEY_X, PROXY_PUBKEY_Y};
+use crate::constants::{
+    MAX_CONTRIBUTIONS_JSON_LEN, MAX_OWNERSHIP_JSON_LEN, OWNERSHIP_JSON_LEN, PROXY_PUBKEY_X,
+    PROXY_PUBKEY_Y,
+};
 use chacha20::ChaCha20;
 use keccak256::keccak256;
 use std::ecdsa_secp256k1::verify_signature;
 
-pub struct JsonSlice<let MAX_JSON_LENGTH: u32> {
-    json: str<MAX_JSON_LENGTH>,
+pub struct JsonSlice<let MAX_JSON_LEN: u32> {
+    json: str<MAX_JSON_LEN>,
     start: u32,
     end: u32,
 }
 
-pub fn search_json<let MAX_LEN: u32, let MAX_JSON_LENGTH: u32>(
-    decrypted: BoundedVec<u8, MAX_LEN>,
-    json_slice: JsonSlice<MAX_JSON_LENGTH>,
-) {
-    for i in 0..MAX_JSON_LENGTH {
-        if i + json_slice.start < json_slice.end {
-            assert(
-                decrypted.get(i + json_slice.start) == json_slice.json.as_bytes()[i],
-                "JSON does not match expected value.",
-            );
-        }
-    }
-}
-
-fn verify_proxy_sig<let max_record_len: u32>(
-    encrypted_record: BoundedVec<u8, max_record_len>,
+fn verify_proxy_sig<let MAX_RECORD_LEN: u32>(
+    encrypted_record: BoundedVec<u8, MAX_RECORD_LEN>,
     proxy_pubkey_x: [u8; 32],
     proxy_pubkey_y: [u8; 32],
     encrypted_record_signature: [u8; 64],
@@ -42,14 +31,63 @@ fn verify_proxy_sig<let max_record_len: u32>(
     assert(is_verified, "proxy did not sign encrypted_record_hash!");
 }
 
-fn decrypt_record<let max_record_len: u32>(
+fn encrypt_substring<let MAX_SUBSTRING_LEN: u32>(
     mut key: [u32; 8],
     ctr: u32,
     mut nonce: [u32; 3],
-    encrypted_record: BoundedVec<u8, max_record_len>,
-) -> BoundedVec<u8, max_record_len> {
+    subtring: str<MAX_SUBSTRING_LEN>,
+    keystream_offset: u32,
+) -> BoundedVec<u8, MAX_SUBSTRING_LEN> {
+    let substring_vec: BoundedVec<u8, MAX_SUBSTRING_LEN> = str_to_bounded_vec(subtring);
     let chacha20 = ChaCha20::new(&mut key, ctr, &mut nonce);
-    let decrypted_record: BoundedVec<u8, max_record_len> = chacha20.decrypt(encrypted_record);
+    let encrypted_substring: BoundedVec<u8, MAX_SUBSTRING_LEN> =
+        chacha20.encrypt_with_offset(substring_vec, keystream_offset);
+
+    encrypted_substring
+}
+
+fn check_encrypted_json_ownership<let MAX_RECORD_LEN: u32>(
+    encrypted_record: BoundedVec<u8, MAX_RECORD_LEN>,
+    encrypted_json: BoundedVec<u8, MAX_OWNERSHIP_JSON_LEN>,
+    start: u32,
+) {
+    for i in 0..OWNERSHIP_JSON_LEN {
+        assert(
+            encrypted_record.get(i + start) == encrypted_json.get(i),
+            "Encrypted JSON does not match expected value.",
+        );
+    }
+}
+
+fn check_encrypted_json_contributions<let MAX_RECORD_LEN: u32>(
+    encrypted_record: BoundedVec<u8, MAX_RECORD_LEN>,
+    encrypted_json: BoundedVec<u8, MAX_CONTRIBUTIONS_JSON_LEN>,
+    start: u32,
+    end: u32,
+) {
+    for i in 0..MAX_CONTRIBUTIONS_JSON_LEN {
+        // Use boolean arithmetic to conditionally check
+        let should_check = (i + start < end) as u32;
+        let record_byte = encrypted_record.get(i + start);
+        let json_byte = encrypted_json.get(i);
+
+        // This will be 0 if bytes match OR if we shouldn't check
+        // Will be 1 only if bytes don't match AND we should check
+        let mismatch = should_check * ((record_byte != json_byte) as u32);
+
+        assert(mismatch == 0, "Encrypted JSON does not match expected value.");
+    }
+}
+
+fn decrypt_record<let MAX_RECORD_LEN: u32>(
+    mut key: [u32; 8],
+    ctr: u32,
+    mut nonce: [u32; 3],
+    encrypted_record: BoundedVec<u8, MAX_RECORD_LEN>,
+) -> BoundedVec<u8, MAX_RECORD_LEN> {
+    let chacha20 = ChaCha20::new(&mut key, ctr, &mut nonce);
+    let decrypted_record: BoundedVec<u8, MAX_RECORD_LEN> = chacha20.decrypt(encrypted_record);
+
     decrypted_record
 }
 
@@ -57,27 +95,27 @@ fn get_proxy_pubkeys() -> ([u8; 32], [u8; 32]) {
     (PROXY_PUBKEY_X, PROXY_PUBKEY_Y)
 }
 
+fn str_to_bounded_vec<let MAX_LEN: u32>(s: str<MAX_LEN>) -> BoundedVec<u8, MAX_LEN> {
+    let vec: BoundedVec<u8, MAX_LEN> = BoundedVec::from_array(s.as_bytes());
+
+    vec
+}
+
 #[test]
-fn test_search_json() {
-    let decrypted: BoundedVec<u8, 200> = BoundedVec::from_array([
-        13, 10, 13, 10, 123, 34, 100, 97, 116, 97, 34, 58, 123, 34, 114, 101, 112, 111, 115, 105,
-        116, 111, 114, 121, 34, 58, 123, 34, 110, 97, 109, 101, 34, 58, 34, 109, 111, 110, 111, 34,
-        44, 34, 111, 119, 110, 101, 114, 34, 58, 123, 34, 108, 111, 103, 105, 110, 34, 58, 34, 116,
-        105, 115, 117, 114, 97, 45, 108, 97, 98, 115, 34, 125, 44, 34, 100, 101, 102, 97, 117, 108,
-        116, 66, 114, 97, 110, 99, 104, 82, 101, 102, 34, 58, 123, 34, 116, 97, 114, 103, 101, 116,
-        34, 58, 123, 34, 104, 105, 115, 116, 111, 114, 121, 34, 58, 123, 34, 116, 111, 116, 97, 108,
-        67, 111, 117, 110, 116, 34, 58, 53, 48, 125, 125, 125, 125, 125, 125, 23, 239, 191, 189,
-        239, 191, 189, 70, 239, 191, 189, 36, 239, 191, 189, 239, 191, 189, 53, 239, 191, 189, 47,
-        62, 77, 79, 239, 191, 189, 239, 191, 189, 73, 239, 191, 189, 98, 125, 239, 191, 189, 239,
-        191, 189, 239, 191, 189, 239, 191, 189, 239, 191, 189, 239, 191, 189, 239, 191, 189, 84, 57,
-        35, 239, 191, 189,
+fn test_check_encrypted_json_ownership() {
+    // Full encrypted record sample
+    let full_record: BoundedVec<u8, MAX_OWNERSHIP_JSON_LEN> = BoundedVec::from_array([
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+        18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ]);
 
-    // Example JSON in string format padded with empty spaces.
-    let json: str<160> = "{\"data\":{\"repository\":{\"name\":\"mono\",\"owner\":{\"login\":\"tisura-labs\"},\"defaultBranchRef\":{\"target\":{\"history\":{\"totalCount\":50}}}}}}                             ";
-    let start: u32 = 4; // Start index of the JSON in the decrypted response.
-    let end: u32 = 135; // End index of the JSON in the decrypted response.
-    let jsonSlice = JsonSlice { json, start, end };
-
-    search_json(decrypted, jsonSlice);
+    // Sample sub-encrypted record
+    let sub_record: BoundedVec<u8, MAX_OWNERSHIP_JSON_LEN> = BoundedVec::from_array([
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+        26, 27, 28, 29, 30, 31, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ]);
+    let start: u32 = 11; // Start index of the JSON in the encrypted response.
+    check_encrypted_json_ownership(full_record, sub_record, start);
 }

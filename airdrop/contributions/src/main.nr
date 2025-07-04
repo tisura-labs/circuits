@@ -7,51 +7,71 @@ use airdrop::utils::{
 };
 use json_parser::{JSON, JSON512b};
 
+pub struct SignaturePayload {
+    pub encrypted_record: BoundedVec<u8, MAX_CONTRIBUTIONS_RECORD_LEN>,
+    pub encrypted_record_signed: [u8; 64],
+    pub proxy_pubkey_x: [u8; 32],
+    pub proxy_pubkey_y: [u8; 32],
+}
+
+pub struct AirdropPayload {
+    pub repo_name: BoundedVec<u8, MAX_REPO_NAME_LEN>,
+    pub repo_owner: BoundedVec<u8, MAX_REPO_OWNER_LEN>,
+    pub n_contributions: u64,
+    pub graphql_response: JsonSlice<MAX_CONTRIBUTIONS_JSON_LEN>,
+}
+
+impl SignaturePayload {
+    pub fn verify_proxy_sig(self) {
+        verify_proxy_sig(
+            self.encrypted_record,
+            self.proxy_pubkey_x,
+            self.proxy_pubkey_y,
+            self.encrypted_record_signed,
+        );
+    }
+}
+
+impl AirdropPayload {
+    pub fn check_contributions(self) {
+        check_contributions(
+            self.graphql_response.json,
+            self.repo_name,
+            self.repo_owner,
+            self.n_contributions,
+        );
+    }
+}
+
 fn main(
     mut key: [u32; 8],
     ctr: u32,
     mut nonce: [u32; 3],
-    encrypted_record: pub BoundedVec<u8, MAX_CONTRIBUTIONS_RECORD_LEN>,
-    repo_name: pub BoundedVec<u8, MAX_REPO_NAME_LEN>,
-    repo_owner: pub BoundedVec<u8, MAX_REPO_OWNER_LEN>,
-    n_contributions: pub u64,
-    graphql_response: pub JsonSlice<MAX_CONTRIBUTIONS_JSON_LEN>,
-    encrypted_record_signed: pub [u8; 64],
-    proxy_pubkey_x: pub [u8; 32],
-    proxy_pubkey_y: pub [u8; 32],
+    signature_payload: pub SignaturePayload,
+    airdrop_payload: pub AirdropPayload,
 ) {
     // 1. Verify encrypted_record comes from the trusted proxy.
-    verify_proxy_sig(
-        encrypted_record,
-        proxy_pubkey_x,
-        proxy_pubkey_y,
-        encrypted_record_signed,
-    );
+    signature_payload.verify_proxy_sig();
 
     // 2. Encrypt the substring of the GraphQL response on the specific keystream offset (start of the JSON in the full encrypted record).
     let encrypted_subtring: BoundedVec<u8, MAX_CONTRIBUTIONS_JSON_LEN> = encrypt_substring(
         key,
         ctr,
         nonce,
-        graphql_response.json,
-        graphql_response.start,
+        airdrop_payload.graphql_response.json,
+        airdrop_payload.graphql_response.start,
     );
 
     // 3. Check whether the encrypted substring (JSON) is present in the full encrypted record.
     check_encrypted_json_contributions(
-        encrypted_record,
+        signature_payload.encrypted_record,
         encrypted_subtring,
-        graphql_response.start,
-        graphql_response.end,
+        airdrop_payload.graphql_response.start,
+        airdrop_payload.graphql_response.end,
     );
 
     // 4. Check for the number of contributions in the GraphQL response.
-    check_contributions(
-        graphql_response.json,
-        repo_name,
-        repo_owner,
-        n_contributions,
-    );
+    airdrop_payload.check_contributions();
 }
 
 fn check_contributions(
@@ -114,8 +134,7 @@ fn test_main() {
     let mut plaintext_vec: BoundedVec<u8, MAX_CONTRIBUTIONS_RECORD_LEN> = BoundedVec::new();
     plaintext_vec.extend_from_array(plaintext.as_bytes());
     let encrypted_record = decrypt_record(key, ctr, nonce, plaintext_vec); // decrypt_record encrypts plaintext.
-
-    let ciphertext_hash_signed: [u8; 64] = get_test_encrypted_record_signed();
+    let encrypted_record_signed: [u8; 64] = get_test_encrypted_record_signed();
     let (proxy_pubkey_x, proxy_pubkey_y) = get_proxy_pubkeys();
 
     // DEV: we pad `json` with empty spaces because any other character will make JSON parsing [l. 84] fail.
@@ -124,19 +143,17 @@ fn test_main() {
     let end: u32 = 126; // End index of the JSON in the decrypted response. 126 = 4 + 122 (length of the JSON).
     let json_slice = JsonSlice { json, start, end };
 
-    main(
-        key,
-        ctr,
-        nonce,
+    let signature_payload = SignaturePayload {
         encrypted_record,
-        repo_name,
-        repo_owner,
-        n_contributions,
-        json_slice,
-        ciphertext_hash_signed,
+        encrypted_record_signed,
         proxy_pubkey_x,
         proxy_pubkey_y,
-    );
+    };
+
+    let airdrop_payload =
+        AirdropPayload { graphql_response: json_slice, repo_name, repo_owner, n_contributions };
+
+    main(key, ctr, nonce, signature_payload, airdrop_payload);
 }
 
 /*

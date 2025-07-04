@@ -31,16 +31,16 @@ fn verify_proxy_sig<let MAX_RECORD_LEN: u32>(
     assert(is_verified, "proxy did not sign encrypted_record_hash!");
 }
 
-fn encrypt_substring<let MAX_SUBSTRING_LEN: u32>(
+fn encrypt_substring<let max_substring_len: u32>(
     mut key: [u32; 8],
     ctr: u32,
     mut nonce: [u32; 3],
-    subtring: str<MAX_SUBSTRING_LEN>,
+    subtring: str<max_substring_len>,
     keystream_offset: u32,
-) -> BoundedVec<u8, MAX_SUBSTRING_LEN> {
-    let substring_vec: BoundedVec<u8, MAX_SUBSTRING_LEN> = str_to_bounded_vec(subtring);
+) -> BoundedVec<u8, max_substring_len> {
+    let substring_vec: BoundedVec<u8, max_substring_len> = str_to_bounded_vec(subtring);
     let chacha20 = ChaCha20::new(&mut key, ctr, &mut nonce);
-    let encrypted_substring: BoundedVec<u8, MAX_SUBSTRING_LEN> =
+    let encrypted_substring: BoundedVec<u8, max_substring_len> =
         chacha20.encrypt_with_offset(substring_vec, keystream_offset);
 
     encrypted_substring
@@ -89,6 +89,16 @@ fn decrypt_record<let MAX_RECORD_LEN: u32>(
     let decrypted_record: BoundedVec<u8, MAX_RECORD_LEN> = chacha20.decrypt(encrypted_record);
 
     decrypted_record
+}
+
+fn encrypt_record<let max_record_len: u32>(
+    mut key: [u32; 8],
+    ctr: u32,
+    mut nonce: [u32; 3],
+    record: BoundedVec<u8, max_record_len>,
+) -> BoundedVec<u8, max_record_len> {
+    let encrypted_record: BoundedVec<u8, max_record_len> = decrypt_record(key, ctr, nonce, record);
+    encrypted_record
 }
 
 fn get_proxy_pubkeys() -> ([u8; 32], [u8; 32]) {

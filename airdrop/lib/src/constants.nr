@@ -18,7 +18,7 @@ global OWNERSHIP_JSON_LEN: u32 = 32; // Length of ownership JSON is always 41, b
 global NODE_ID_LEN: u32 = 12;
 
 // Contributions.
-global MAX_CONTRIBUTIONS_RECORD_LEN: u32 = 1216; // 64 * 19
+global MAX_CONTRIBUTIONS_RECORD_LEN: u32 = 1280; // 64 * 20
 global MAX_CONTRIBUTIONS_JSON_LEN: u32 = 192; // 64 * 3
 global MAX_REPO_NAME_LEN: u32 = 20;
 global MAX_REPO_OWNER_LEN: u32 = 20;

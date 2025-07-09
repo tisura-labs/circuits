@@ -66,16 +66,12 @@ fn check_encrypted_json_contributions<let MAX_RECORD_LEN: u32>(
     end: u32,
 ) {
     for i in 0..MAX_CONTRIBUTIONS_JSON_LEN {
-        // Use boolean arithmetic to conditionally check
-        let should_check = (i + start < end) as u32;
-        let record_byte = encrypted_record.get(i + start);
-        let json_byte = encrypted_json.get(i);
-
-        // This will be 0 if bytes match OR if we shouldn't check
-        // Will be 1 only if bytes don't match AND we should check
-        let mismatch = should_check * ((record_byte != json_byte) as u32);
-
-        assert(mismatch == 0, "Encrypted JSON does not match expected value.");
+        if (i + start) < end {
+            assert(
+                encrypted_record.get(i + start) == encrypted_json.get(i),
+                "Encrypted JSON does not match expected value.",
+            );
+        }
     }
 }
 

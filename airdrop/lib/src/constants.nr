@@ -8,17 +8,17 @@ global PROXY_PUBKEY_Y: [u8; 32] = [
 ];
 
 // IMPORTANT: The constants below that are used for encryption/decryption parameters must always
-// be multiples of 64 (e.g., 1280 = 64 * 20).
+// be multiples of 64 (e.g., 1216 = 64 * 19).
 
 // Ownership.
-global MAX_OWNERSHIP_RECORD_LEN: u32 = 1280; // 64 * 20
+global MAX_OWNERSHIP_RECORD_LEN: u32 = 1216; // 64 * 19
 global MAX_OWNERSHIP_JSON_LEN: u32 = 64; // Legnth of ownership JSON padded to 64
 // TODO: Update OWNERSHIP_JSON_LEN to 41 when the circuit supports it.
 global OWNERSHIP_JSON_LEN: u32 = 32; // Length of ownership JSON is always 41, but current version doesn't support full JSON consistently.
 global NODE_ID_LEN: u32 = 12;
 
 // Contributions.
-global MAX_CONTRIBUTIONS_RECORD_LEN: u32 = 1344; // 64 * 21
+global MAX_CONTRIBUTIONS_RECORD_LEN: u32 = 1280; // 64 * 20
 global MAX_CONTRIBUTIONS_JSON_LEN: u32 = 192; // 64 * 3
 global MAX_REPO_NAME_LEN: u32 = 20;
 global MAX_REPO_OWNER_LEN: u32 = 20;

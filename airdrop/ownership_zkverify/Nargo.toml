@@ -1,5 +1,5 @@
 [package]
-name = "ownership_zk_verify"
+name = "ownership_zkverify"
 version = "1.0.0-beta.6"
 type = "bin"
 authors = ["Tisura"]
